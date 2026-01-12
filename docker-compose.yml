@@ -1,0 +1,65 @@
+services:
+  db:
+    image: postgres:16
+    container_name: auth_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: auth_db
+      POSTGRES_USER: auth_user
+      POSTGRES_PASSWORD: auth_password_change_me
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auth_user -d auth_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7
+    container_name: auth_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: auth_api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: development
+
+      # IMPORTANT: inside Docker, use service names (db, redis), not localhost
+      DATABASE_URL: postgresql://auth_user:auth_password_change_me@db:5432/auth_db?schema=public
+      REDIS_URL: redis://redis:6379
+
+      # Secrets (replace with strong values; don't commit real secrets)
+      JWT_ACCESS_SECRET: change_me_access
+      JWT_REFRESH_SECRET: change_me_refresh
+
+      # Optional CORS/cookie config if you use it
+      # CORS_ORIGIN: http://localhost:3000
+      # COOKIE_SECURE: "false"
+      # COOKIE_SAMESITE: "lax"
+
+volumes:
+  pgdata:
+  redisdata:
