@@ -33,7 +33,7 @@ services:
 
   api:
     build:
-      context: ./apps/api
+      context: ./app/api
       dockerfile: Dockerfile
     container_name: auth_api
     restart: unless-stopped
