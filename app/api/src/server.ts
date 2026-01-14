@@ -1,27 +1,78 @@
 import express from "express";
 import pool from "./db/db";
+import redisClient from "./redis";
+
 
 const app = express();
+
 
 app.get("/", (req, res) => {
   res.send("API is running");
 });
 
 app.get("/health", async (req, res) => {
-   let dbHealthy = true;
-   try{
-    // DB ping
+  const checks = {
+   db: "unhealthy" as "healthy" | "unhealthy",
+   redis: "unhealthy" as "healthy"| "unhealthy",
+  }
+  try{
     await pool.query("SELECT 1");
-   } catch (error) {
-    dbHealthy = false;
-    console.error("DB ping failed", error);
-   }
-   res.status(dbHealthy ? 200 : 503).json({ status: dbHealthy ? "ok" : "error", db: dbHealthy ? "connected" : "disconnected" });
+    checks.db = "healthy";
+  } catch (error) {
+    checks.db = "unhealthy";
+  }
+  try{
+    const pong = await redisClient.ping();
+    if (pong ==="PONG") checks.redis = "healthy"; 
+  } catch (error) {
+    checks.redis = "unhealthy";
+  }
+
+  const ready = checks.db === "healthy" && checks.redis === "healthy";
+  res.status(ready ? 200 : 503).json({ status: ready ? "ok" : "error", ...checks });
+});
+
+app.get("/health/live", (req, res) => {
+  res.status(200).json({ status: "alive" });
+});
+
+app.get("/health/ready", async (req, res) => {
+  const checks = {
+    db: "unhealthy" as "healthy" | "unhealthy",
+    redis: "unhealthy" as "healthy"| "unhealthy",
+  }
+  try{
+    await pool.query("SELECT 1");
+    checks.db = "healthy";
+  } catch (error) {
+    checks.db = "unhealthy";
+  }
+  try{
+    const pong = await redisClient.ping();
+    if (pong ==="PONG") checks.redis = "healthy";
+  } catch (error) {
+    checks.redis = "unhealthy";
+  }
+  const ready = checks.db === "healthy" && checks.redis === "healthy";
+  res.status(ready ? 200 : 503).json({ status: ready ? "ok" : "error", ...checks });
 });
 
 
+
+
+
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-    console.log(` Server is running on port ${PORT}`);
+
+// ensure redis is connected before accepting traffic
+async function start() {
+  await redisClient.connect();
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+}
+
+start().catch((err) => {
+  console.error("Failed to start server:", err);
+  process.exit(1);
 });
 export default app;
