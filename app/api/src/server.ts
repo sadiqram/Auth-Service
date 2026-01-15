@@ -77,9 +77,11 @@
 // });
 // export default app;
 
+import "dotenv/config";
 import app from "./app";
 import pool from "./db/db";
 import { connectRedis } from "./redis";
+
 
 const PORT = Number(process.env.PORT ?? 4000);
 
@@ -99,5 +101,5 @@ async function start() {
     process.exit(1);
   }
 }
-
+console.log("DATABASE_URL:", process.env.DATABASE_URL);
 start();
