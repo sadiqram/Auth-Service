@@ -11,6 +11,7 @@
     "prisma-migrate-dev": "docker exec myApp npx prisma migrate dev",
     "prisma-studio": "docker exec myApp npx prisma studio"
   },
+  
   "keywords": [],
   "author": "",
   "license": "ISC",
