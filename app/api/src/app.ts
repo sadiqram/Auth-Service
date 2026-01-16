@@ -1,6 +1,7 @@
 import express from "express";
 import pool from "./db/db";
 import redisClient from "./redis";
+import authRoutes from "./auth/routes"
 
 const app = express();
 
@@ -10,6 +11,8 @@ app.use(express.json());
 app.get("/", (_req, res) => {
   res.send("API is running");
 });
+
+app.use("/auth", authRoutes)
 
 // shared check function to avoid duplicating code
 async function checkDependencies() {
@@ -50,6 +53,11 @@ app.get("/health/ready", async (_req, res) => {
     status: ready ? "ok" : "error",
     ...checks,
   });
+});
+
+app.use((err: any, _req: any, res: any, _next: any) => {
+  console.error(err);
+  res.status(500).json({ error: err?.message ?? "Internal Server Error" });
 });
 
 export default app;
