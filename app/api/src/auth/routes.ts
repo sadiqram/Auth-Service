@@ -195,5 +195,58 @@ router.post("/refresh", async (req, res) => {
   }
 })
 
-// LOGOUT
+// LOGOUT (revoke refresh token)
+
+
+router.post("/logout", async (req, res) => {
+  const ip = req.ip
+  const userAgent = req.get("user-agent") ?? undefined
+
+
+  try {
+    const { refreshToken } = logoutSchema.parse(req.body)
+    const tokenHash = hashRefreshToken(refreshToken)
+
+    const stored = await prisma.refreshToken.findUnique({
+      where: { tokenHash }
+    })
+
+    // INVALID token
+    if (!stored) {
+      await prisma.auditLog.create({
+        data: { action: AuditAction.logout_fail, ip, userAgent }
+      })
+      // *****
+      // ik sending 200 ok looks weird, but this is to not leak token validity
+      //*** */
+      return res.status(200).json({ status: "ok" })
+    }
+
+    if (!stored.revokedAt) {
+      await prisma.refreshToken.update({
+        where: { tokenHash },
+        data: { revokedAt: new Date() }
+      })
+    }
+
+
+    await prisma.auditLog.create({
+      data: { action: AuditAction.logout_success, userId: stored.userId, ip, userAgent }
+    })
+
+    return res.status(200).json({ status: "ok" })
+
+
+  } catch (err: any) {
+    if (err?.name === "ZodError") {
+      await prisma.auditLog.create({
+        data: { action: AuditAction.login_fail, ip, userAgent }
+      })
+      return res.status(400).json({ error: "Invalid input", details: err.issues })
+    }
+    console.error(err)
+    return res.status(500).json({ error: "Internal server error" })
+  }
+})
+
 export default router;
