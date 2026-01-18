@@ -1,9 +1,9 @@
 import { Router } from "express";
 import bcrypt from "bcrypt";
 import { prisma } from "../prisma";
-import { loginSchema, registerSchema } from "./schema";
+import { loginSchema, registerSchema, refreshSchema, logoutSchema } from "./schema";
 import { AuditAction } from "../generated/prisma/client";
-import { signAccessToken, generateRefreshToken } from "../tokens";
+import { signAccessToken, generateRefreshToken, hashRefreshToken } from "../tokens";
 
 
 const router = Router();
@@ -120,4 +120,80 @@ router.post("/login", async (req, res) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 });
+
+// REFRESH (rotate refresh token)
+router.post("/refresh", async (req, res) => {
+  const ip = req.ip
+  const userAgent = req.get("user-agent") ?? undefined;
+
+  try {
+    const { refreshToken } = refreshSchema.parse(req.body)
+    const tokenHash = hashRefreshToken(refreshToken);
+
+    const stored = await prisma.refreshToken.findUnique({
+      where: { tokenHash },
+      include: { user: true }
+    })
+
+
+
+    //invalid token
+    if (!stored) {
+      await prisma.auditLog.create({
+        data: { action: AuditAction.refresh_fail, ip, userAgent }
+      })
+      return res.status(401).json({ error: "Invalid refresh token" })
+    }
+
+    //revoked or expired token
+    if (stored.revokedAt || stored.expiresAt <= new Date()
+    ) {
+      await prisma.auditLog.create({
+        data: { action: AuditAction.refresh_fail, userId: stored.userId, ip, userAgent }
+      })
+      return res.status(401).json({ error: "Refresh token expired or revoked" })
+    }
+
+    //rotate: revoke old + create new + issue new access
+    const accessToken = signAccessToken({
+      sub: stored.userId, role: stored.user.role
+    })
+
+    const { token: newRefreshToken, tokenHash: newTokenHash } = generateRefreshToken();
+
+    const newExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+
+    await prisma.$transaction([
+      prisma.refreshToken.update({
+        where: { tokenHash },
+        data: { revokedAt: new Date() },
+      }),
+      prisma.refreshToken.create({
+        data: {
+          userId: stored.userId,
+          tokenHash: newTokenHash,
+          expiresAt: newExpiresAt
+        }
+      }),
+      prisma.auditLog.create({
+        data: { action: AuditAction.refresh_success, userId: stored.userId, ip, userAgent }
+      })
+    ])
+    return res.status(200).json({
+      accessToken,
+      refreshToken: newRefreshToken,
+    })
+  } catch (err: any) {
+    if (err?.name == "ZodError") {
+      await prisma.auditLog.create({
+        data: { action: AuditAction.register_fail, ip, userAgent }
+      })
+      return res.status(400).json({ error: "Invalid input", details: err.issues })
+    }
+    console.error(err)
+    return res.status(500).json({ error: "Internal Server Error" })
+  }
+})
+
+// LOGOUT
 export default router;
