@@ -5,6 +5,13 @@ import { loginSchema, registerSchema, refreshSchema, logoutSchema } from "./sche
 import { AuditAction } from "../generated/prisma/client";
 import { signAccessToken, generateRefreshToken, hashRefreshToken } from "../tokens";
 
+/*
+
+To code “real-world” move refresh token to an HttpOnly cookie (more secure) and return only the access token in JSON.
+
+
+**/
+
 
 const router = Router();
 
