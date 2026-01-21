@@ -6,7 +6,7 @@
 
 generator client {
   provider = "prisma-client"
-  output = "../src/generated/prisma"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
@@ -30,7 +30,10 @@ enum AuditAction {
 }
 
 model User {
-  id           String @id @default(uuid()) @db.Uuid
+  id        String  @id @default(uuid()) @db.Uuid
+  projectId String  @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
   email        String @unique
   passwordHash String
 
@@ -41,15 +44,22 @@ model User {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([projectId, email]) // Key for multi-tenant requirement
+  @@index([projectId])
+  @@index([email])
 }
 
 model RefreshToken {
   id String @id @default(uuid()) @db.Uuid
 
+  projectId String  @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
   userId String @db.Uuid
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // IMPORTANT: store a hash of the refresh token, NOT the raw token
+  // store a hash of the refresh token, NOT the raw token
   tokenHash String @unique
 
   revokedAt DateTime?
@@ -58,6 +68,7 @@ model RefreshToken {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([projectId])
   @@index([userId])
   @@index([expiresAt])
   @@index([revokedAt])
@@ -65,6 +76,9 @@ model RefreshToken {
 
 model AuditLog {
   id String @id @default(uuid()) @db.Uuid
+
+  projectId String  @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   // Nullable because you may want to log attempts without a known user
   userId String? @db.Uuid
@@ -99,8 +113,8 @@ model Project {
   jwtAccessSecret  String
   jwtRefreshSecret String
 
-  users       User[]
-  auditLogs   AuditLog[]
+  users         User[]
+  auditLogs     AuditLog[]
   refreshTokens RefreshToken[]
 
   createdAt DateTime @default(now())
