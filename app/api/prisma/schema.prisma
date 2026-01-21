@@ -82,3 +82,29 @@ model AuditLog {
   @@index([action])
   @@index([createdAt])
 }
+
+// may potentially remove this if multi-tenat design becomes too confusing
+model Project {
+  id   String @id @default(uuid()) @db.Uuid
+  name String
+
+  // Public identifier you can show in dashboards / logs (not secret)
+  slug String @unique
+
+  // API key: store only a hash (never store raw key)
+  apiKeyHash String @unique
+
+  // Optional: per-project JWT secrets (recommended for true “as-a-service”)
+  // Store encrypted at rest in a real prod system. For portfolio, plain env/DB is fine.
+  jwtAccessSecret  String
+  jwtRefreshSecret String
+
+  users       User[]
+  auditLogs   AuditLog[]
+  refreshTokens RefreshToken[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([slug])
+}
